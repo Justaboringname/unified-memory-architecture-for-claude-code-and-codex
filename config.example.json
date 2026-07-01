@@ -1,0 +1,17 @@
+{
+  "dbPath": "./data/unified-memory.db",
+  "claudeExportDir": "/absolute/path/to/your/claude-export-directory",
+  "claudeHome": "~/.claude",
+  "claudeProjects": [],
+  "agents": {
+    "claude": { "adapter": "mock", "model": "claude-opus-4-8", "enabled": true },
+    "codex": { "adapter": "mock", "enabled": true }
+  },
+  "redaction": { "enabled": true },
+  "_notes": {
+    "adapter": "'mock' runs offline & free (default). Set to 'claude-cli' / 'codex-cli' to invoke the real authenticated CLIs (may incur cost).",
+    "model": "Optional. OMIT the codex model on a ChatGPT-account Codex login (e.g. 'gpt-5-codex' returns 400 'not supported'); leaving it unset uses the account default. Claude accepts model ids like 'claude-opus-4-8'.",
+    "claudeProjects": "Empty = ingest all ~/.claude/projects/* slugs. List slugs (e.g. '-Users-you') to restrict.",
+    "dbPath": "Kept under ./data/ which is gitignored — the DB holds raw message content and is a sensitive artifact."
+  }
+}

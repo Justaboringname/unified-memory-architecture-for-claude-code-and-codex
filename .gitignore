@@ -1,0 +1,36 @@
+# ── Privacy-critical: derived data & the DB are sensitive artifacts ──
+# The SQLite DB contains raw message content (the evidence layer). NEVER commit it.
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Real config points at absolute paths on the user's machine; keep it local.
+config.json
+config.local.json
+.env
+.env.*
+
+# Working / temp
+work/
+outputs/
+tmp/
+*.log
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+
+# Never commit anything copied out of the raw export or ~/.claude
+raw-export/
+raw-mirror/
+
+# The inventory report describes the owner's PRIVATE data (paths, project names,
+# counts). Generated locally with `umem inventory`; never published.
+docs/INVENTORY-REPORT.md

@@ -1,0 +1,14 @@
+{
+  "uuid": "proj-1111",
+  "name": "ShooterSim",
+  "description": "Synthetic project for FRC shooter simulation work (fake data).",
+  "is_private": true,
+  "is_starter_project": false,
+  "prompt_template": "",
+  "created_at": "2025-01-01T00:00:00.000000+00:00",
+  "updated_at": "2025-01-05T00:00:00.000000+00:00",
+  "creator": { "uuid": "acc-0000", "full_name": "Test User" },
+  "docs": [
+    { "uuid": "doc-1", "filename": "design-notes.md", "content": "The dumper uses a 4-ball wide layout. Energy efficiency favors lower exit velocity. Sweet spot hood 55-70 degrees. Fake doc.", "created_at": "2025-01-01T00:00:00.000000+00:00" }
+  ]
+}
