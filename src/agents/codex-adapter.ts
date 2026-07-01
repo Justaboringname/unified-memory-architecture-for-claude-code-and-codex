@@ -1,8 +1,8 @@
 import { writeFileSync, readFileSync, mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentAdapter, CompleteOpts, CompleteResult } from "./adapter.ts";
-import { run, binaryAvailable } from "./spawn.ts";
+import type { AgentAdapter, CompleteOpts, CompleteResult, StreamUpdate } from "./adapter.ts";
+import { run, runStream, binaryAvailable } from "./spawn.ts";
 
 /**
  * Codex CLI headless adapter.
@@ -27,6 +27,64 @@ export class CodexCliAdapter implements AgentAdapter {
   async available() {
     const ok = await binaryAvailable("codex");
     return ok ? { ok: true } : { ok: false, reason: "`codex` CLI not found or not responding to --version" };
+  }
+
+  /**
+   * Streaming completion over the `codex exec --json` event stream. Codex does
+   * not emit per-token deltas — agent_message items land whole on
+   * item.completed — so updates are coarse; command/tool activity is surfaced
+   * as a live status instead.
+   */
+  async stream(prompt: string, opts: CompleteOpts, onUpdate: (u: StreamUpdate) => void): Promise<CompleteResult> {
+    const tmp = mkdtempSync(join(tmpdir(), "umem-codex-"));
+    try {
+      const lastMsg = join(tmp, "last.txt");
+      const args = ["exec", "--json", "--skip-git-repo-check", "-s", "read-only", "--output-last-message", lastMsg];
+      const model = opts.model ?? this.model;
+      if (model) args.push("-m", model);
+      if (opts.workdir) args.push("-C", opts.workdir);
+      const fullPrompt = opts.systemPrompt ? `${opts.systemPrompt}\n\n${prompt}` : prompt;
+      args.push("-");
+
+      const parts: string[] = [];
+      let live = ""; // in-flight partial of the current message (item.updated)
+      let tokens: number | undefined;
+      let turnError = "";
+      const text = () => [...parts, live].filter(Boolean).join("\n\n");
+      onUpdate({ text: "", status: "连接中…" });
+      const r = await runStream("codex", args, {
+        stdin: fullPrompt,
+        cwd: opts.workdir,
+        timeoutMs: opts.timeoutMs ?? 300000,
+        onLine: (line) => {
+          if (!line.startsWith("{")) return;
+          let ev: any;
+          try { ev = JSON.parse(line); } catch { return; }
+          const item = ev?.item;
+          if (item?.type === "agent_message" && typeof item.text === "string") {
+            if (ev.type === "item.completed") { parts.push(item.text); live = ""; onUpdate({ text: text() }); }
+            else { live = item.text; onUpdate({ text: text() }); } // item.started/updated (defensive)
+          } else if (item?.type === "command_execution") {
+            if (ev.type === "item.started") onUpdate({ text: text(), status: "运行命令中…" });
+            else if (ev.type === "item.completed") onUpdate({ text: text(), status: "思考中…" });
+          } else if (item?.type === "reasoning") {
+            onUpdate({ text: text(), status: "推理中…" });
+          } else if (ev.type === "turn.failed" || ev.type === "error") {
+            turnError = JSON.stringify(ev.error ?? ev).slice(0, 300);
+          }
+          const u = ev?.msg?.usage ?? ev?.usage ?? ev?.token_usage;
+          if (u) tokens = (u.input_tokens ?? 0) + (u.output_tokens ?? 0);
+        },
+      });
+      const fileText = existsSync(lastMsg) ? readFileSync(lastMsg, "utf-8").trim() : "";
+      const finalText = fileText || text();
+      if (!finalText) {
+        throw new Error(`codex exited ${r.code}${r.timedOut ? " (timeout)" : ""}: ${turnError || r.stderr.slice(0, 400) || "(no diagnostic output)"}`);
+      }
+      return { text: finalText, cost: { tokens }, adapter: this.id, model, raw: { stderrTail: r.stderr.slice(-200) } };
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   }
 
   async complete(prompt: string, opts: CompleteOpts = {}): Promise<CompleteResult> {

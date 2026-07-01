@@ -117,8 +117,11 @@ export interface Panel {
   footer?: string; // e.g. "⏱ 42s · $0.31"
 }
 
-/** Render one framed panel at `width` total columns. */
-export function renderPanel(p: Panel, width: number): string[] {
+/**
+ * Render one framed panel at `width` total columns. With `tailLines`, only the
+ * last N body lines are shown (live-streaming view), with a dim ellipsis row.
+ */
+export function renderPanel(p: Panel, width: number, tailLines?: number): string[] {
   const inner = width - 4; // "│ " + " │"
   const d = ANSI.dim;
   const r = ANSI.reset;
@@ -128,7 +131,11 @@ export function renderPanel(p: Panel, width: number): string[] {
   const dashRight = Math.max(0, width - 3 - tW);
   const lines: string[] = [];
   lines.push(`${d}╭─${r}${tc}${ANSI.bold}${padDisplay(title, Math.min(tW, width - 3))}${r}${d}${"─".repeat(dashRight)}╮${r}`);
-  for (const l of wrapDisplay(p.body, inner)) {
+  let body = wrapDisplay(p.body, inner);
+  if (tailLines != null && body.length > tailLines) {
+    body = [`${ANSI.gray}…(前文 ${body.length - tailLines + 1} 行)${ANSI.reset}`, ...body.slice(-(tailLines - 1))];
+  }
+  for (const l of body) {
     lines.push(`${d}│${r} ${padDisplay(l, inner)} ${d}│${r}`);
   }
   if (p.footer) {
@@ -143,16 +150,16 @@ export function renderPanel(p: Panel, width: number): string[] {
  * Render two panels side by side (or stacked when the terminal is narrow).
  * Returns the full string ready to print.
  */
-export function renderSideBySide(left: Panel, right: Panel, termWidth: number): string {
+export function renderSideBySide(left: Panel, right: Panel, termWidth: number, tailLines?: number): string {
   const gap = 2;
   if (termWidth < 90) {
     // stacked fallback
     const w = Math.max(40, Math.min(termWidth, 100));
-    return [...renderPanel(left, w), "", ...renderPanel(right, w)].join("\n");
+    return [...renderPanel(left, w, tailLines), "", ...renderPanel(right, w, tailLines)].join("\n");
   }
   const colW = Math.floor((Math.min(termWidth, 190) - gap) / 2);
-  const L = renderPanel(left, colW);
-  const R = renderPanel(right, colW);
+  const L = renderPanel(left, colW, tailLines);
+  const R = renderPanel(right, colW, tailLines);
   const n = Math.max(L.length, R.length);
   const blankL = " ".repeat(colW);
   const rows: string[] = [];

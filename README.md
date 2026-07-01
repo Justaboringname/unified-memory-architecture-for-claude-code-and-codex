@@ -30,15 +30,18 @@ alias umem='node --experimental-strip-types --no-warnings src/cli/index.ts'
 
 ## ccc — ask both, side by side
 
-The fastest way to use the two agents: `ccc` sends one question to Claude Code and Codex **in parallel** (each on its own CLI default model — nothing is forced) and renders the two answers side by side, with `model · effort` in each panel title. The adversarial council is off by default.
+The fastest way to use the two agents: `ccc` sends one question to Claude Code and Codex **in parallel** (each on its own CLI default model — nothing is forced) and **streams** both answers into two live-updating panels — Claude arrives token by token (`stream-json` deltas), Codex per message chunk — then prints a full final render. Panel titles show `model · effort`. The adversarial council is off by default.
 
 ```bash
 npm link                 # installs `ccc` (and `umem`) into your global bin
-ccc 计算机的N和NP是什么意思？        # one-shot, two columns
-ccc                      # interactive loop
+ccc 计算机的N和NP是什么意思？        # one-shot, two live streaming columns
+ccc                      # interactive Claude-Code-style prompt box
 ccc --council "..."      # additionally run cross-review + synthesis
+ccc --no-stream "..."    # wait for full answers instead of streaming
 ccc --mock "..."         # offline/free layout test
 ```
+
+During streaming each panel shows a live tail (last N lines) so long answers never outrun the viewport; the complete text lands in the final render.
 
 Every Q&A is recorded to the audit trail (`tasks` mode `qa` + `agent_runs`).
 

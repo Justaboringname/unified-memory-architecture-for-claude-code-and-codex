@@ -131,7 +131,7 @@ export function readBoxedLine(label: string, placeholder: string): Promise<strin
     const chars: string[] = []; // code points
     let cursor = 0;
     let drawn = 0; // rows drawn last time
-    const width = () => stdout.columns ?? 100;
+    const width = () => stdout.columns || 100;
 
     const render = () => {
       const frame = buildInputFrame({ text: chars.join(""), cursor, totalWidth: width(), label, placeholder });
