@@ -12,7 +12,9 @@
 // ============================================================================
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import { loadConfig, type Config } from "../util/config.ts";
 import { ClaudeCliAdapter } from "../agents/claude-adapter.ts";
 import { CodexCliAdapter } from "../agents/codex-adapter.ts";
@@ -22,27 +24,56 @@ import { banner, readBoxedLine } from "./prompt-box.ts";
 import { openDb } from "../db/db.ts";
 import { nowIso } from "../util/time.ts";
 
-const HELP = `ccc — ask Claude Code and Codex the same question, side by side (streaming)
+const HELP = `ccc — Claude Code as the kernel, Codex answering alongside
 
-USAGE
-  ccc <question>            one-shot: both CLIs answer in parallel, streamed live
-  ccc                       interactive prompt box (Ctrl-C or "exit" to quit)
+USAGE (kernel mode — default)
+  ccc [question]            launch the REAL Claude Code TUI in this workspace;
+                            every question you ask is ALSO sent to Codex
+                            (read-only, fast mode) and both answers are shown
+  ccc -p "<question>"       kernel mode, one-shot print (no TUI)
+
+USAGE (panels mode — standalone two-column renderer)
+  ccc --panels [question]   the original side-by-side streaming panels
+  ccc --mock [question]     offline mock panels (free; implies --panels)
 
 FLAGS
-  --council                 also run cross-review + synthesis (costs more, slower)
-  --mock                    offline mock adapters (free; for layout testing)
-  --no-stream               wait for full answers instead of live streaming
   --no-fast                 disable Codex fast mode (fast = 1.5x speed, 2.5x credits)
-  --timeout <seconds>       per-agent timeout (default 300)
+  --council                 (panels mode) also run cross-review + synthesis
+  --no-stream               (panels mode) wait for full answers, no live streaming
+  --timeout <seconds>       (panels mode) per-agent timeout (default 300)
   --config <path>           config file (default: repo config.json chain)
   --help                    this help
 
-Models: claude defaults to claude-fable-5 (permission-mode default, no plan);
-codex uses its own config.toml default with fast mode ON. Codex cost is shown
-as ≈$ (API list-price conversion — a ChatGPT plan actually bills in credits).
-Set agents.<name>.model in config to override either model.`;
+Kernel mode IS Claude Code: real workspace, tools, permissions, sessions —
+with a dual-answer orchestrator injected (Codex runs sandboxed read-only in
+your cwd). Claude model defaults to claude-fable-5; codex uses its config.toml
+default. Codex cost in panels mode shows as ≈$ (API list-price conversion).`;
 
 const CCC_CLAUDE_DEFAULT_MODEL = "claude-fable-5";
+
+// ---- kernel mode: exec the real Claude Code TUI with the ccc behavior injected ----
+function runKernel(question: string, cfg: Config, opts: { print: boolean; noFast: boolean }): never {
+  const promptPath = join(dirname(fileURLToPath(import.meta.url)), "ccc-kernel-prompt.md");
+  let sys = readFileSync(promptPath, "utf-8");
+  if (opts.noFast) sys = sys.replaceAll(` -c 'service_tier="fast"' --enable fast_mode`, "");
+  const model = cfg.agents.claude.model ?? CCC_CLAUDE_DEFAULT_MODEL;
+  const args: string[] = [];
+  if (opts.print) args.push("-p");
+  // question must come BEFORE --allowedTools: that option is variadic
+  // (<tools...>) and swallows any positional that follows it
+  if (question) args.push(question);
+  args.push(
+    "--model", model,
+    "--append-system-prompt", sys,
+    // let the orchestrator launch codex without a permission prompt
+    "--allowedTools", "Bash(codex:*)",
+  );
+  if (!opts.print) {
+    process.stdout.write(`${ANSI.dim}ccc → Claude Code 内核 · Codex 伴答已注入(工作区: ${process.cwd()})${ANSI.reset}\n`);
+  }
+  const r = spawnSync("claude", args, { stdio: "inherit" });
+  process.exit(r.status ?? 0);
+}
 
 // ---- default model/effort discovery (for the panel titles) ----
 interface CliDefaults { model: string; effort: string; }
@@ -223,12 +254,14 @@ async function runOnce(question: string, cfg: Config, opts: { mock: boolean; cou
 
 async function main() {
   const argv = process.argv.slice(2);
-  const flags = { mock: false, council: false, noStream: false, noFast: false, timeoutMs: 300000, config: undefined as string | undefined };
+  const flags = { mock: false, council: false, noStream: false, noFast: false, panels: false, print: false, timeoutMs: 300000, config: undefined as string | undefined };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--help" || a === "-h") { console.log(HELP); return; }
-    else if (a === "--mock") flags.mock = true;
+    else if (a === "--mock") { flags.mock = true; flags.panels = true; }
+    else if (a === "--panels") flags.panels = true;
+    else if (a === "-p" || a === "--print") flags.print = true;
     else if (a === "--council") flags.council = true;
     else if (a === "--no-stream") flags.noStream = true;
     else if (a === "--no-fast") flags.noFast = true;
@@ -238,6 +271,12 @@ async function main() {
   }
   const cfg = loadConfig(flags.config);
   const question = positional.join(" ").trim();
+
+  // kernel mode (default): the real Claude Code harness IS the UI
+  if (!flags.panels) {
+    if (flags.print && !question) { console.error('用法:ccc -p "<问题>"'); process.exit(1); }
+    runKernel(question, cfg, { print: flags.print, noFast: flags.noFast });
+  }
 
   if (question) {
     await runOnce(question, cfg, flags);

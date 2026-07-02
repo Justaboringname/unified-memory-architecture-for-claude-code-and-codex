@@ -28,20 +28,27 @@ Requires Node ≥ 22.6 (uses native TypeScript type-stripping — no build step)
 alias umem='node --experimental-strip-types --no-warnings src/cli/index.ts'
 ```
 
-## ccc — ask both, side by side
+## ccc — Claude Code as the kernel, Codex answering alongside
 
-The fastest way to use the two agents: `ccc` sends one question to Claude Code and Codex **in parallel** and **streams** both answers into two live-updating panels — Claude arrives token by token (`stream-json` deltas), Codex per message chunk — then prints a full final render. Panel titles show `model · effort`. Defaults: Claude runs `claude-fable-5` in normal (non-plan) permission mode; Codex runs its config.toml default model with **fast mode** on (`service_tier=fast`, 1.5x speed / 2.5x credits; `--no-fast` to disable). Codex cost shows as `≈$` — an API list-price conversion, since ChatGPT plans bill in credits. The adversarial council is off by default.
+`ccc` launches the **real Claude Code TUI** as its kernel — real workspace, tools, permissions, sessions — with a dual-answer orchestrator injected: every question you ask is answered by Claude normally **and** independently by Codex (spawned read-only in your cwd, fast mode), whose answer is appended verbatim under its own heading. No cross-review unless you ask.
 
 ```bash
 npm link                 # installs `ccc` (and `umem`) into your global bin
-ccc 计算机的N和NP是什么意思？        # one-shot, two live streaming columns
-ccc                      # interactive Claude-Code-style prompt box
-ccc --council "..."      # additionally run cross-review + synthesis
-ccc --no-stream "..."    # wait for full answers instead of streaming
-ccc --mock "..."         # offline/free layout test
+ccc                      # kernel mode: real Claude Code TUI + Codex alongside
+ccc "这个 repo 的构建流程是怎样的?"   # kernel mode, seeded first question (workspace-aware)
+ccc -p "什么是 DNS?"      # kernel mode, one-shot print (no TUI)
 ```
 
-During streaming each panel shows a live tail (last N lines) so long answers never outrun the viewport; the complete text lands in the final render.
+The original standalone renderer survives as **panels mode** — two live-streaming columns (Claude per-token via `stream-json` deltas, Codex per message chunk), `model · effort` titles, live tail view, full final render:
+
+```bash
+ccc --panels "计算机的N和NP是什么意思？"   # two live streaming columns
+ccc --panels             # bordered prompt-box REPL
+ccc --mock "..."         # offline/free layout test (implies --panels)
+ccc --panels --council "..."   # additionally run cross-review + synthesis
+```
+
+Defaults in both modes: Claude `claude-fable-5`; Codex its config.toml default model with **fast mode** on (`service_tier=fast`, 1.5x speed / 2.5x credits; `--no-fast` to disable). In panels mode Codex cost shows as `≈$` — an API list-price conversion, since ChatGPT plans bill in credits.
 
 Every Q&A is recorded to the audit trail (`tasks` mode `qa` + `agent_runs`).
 
