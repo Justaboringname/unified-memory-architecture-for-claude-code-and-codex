@@ -1,4 +1,4 @@
-# Unified Memory Architecture for Claude Code and Codex
+# Unified Memory Harness for Claude Code & Codex
 
 A **local-first, auditable** system with two independent components:
 

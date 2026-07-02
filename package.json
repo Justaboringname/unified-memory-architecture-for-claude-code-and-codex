@@ -1,9 +1,9 @@
 {
-  "name": "unified-memory-architecture-for-claude-code-and-codex",
+  "name": "unified-memory-harness-for-claude-code-and-codex",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Unified Memory Architecture for Claude Code and Codex — a local-first, auditable unified memory layer (SQLite/FTS5 + Memory MCP) plus a Claude+Codex dual-agent council (independent analysis → cross-review → synthesis).",
+  "description": "Unified Memory Harness for Claude Code & Codex — a local-first, auditable unified memory layer (SQLite/FTS5 + Memory MCP) plus a Claude+Codex dual-agent council (independent analysis → cross-review → synthesis).",
   "engines": {
     "node": ">=22.6"
   },
