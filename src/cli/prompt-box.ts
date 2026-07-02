@@ -89,6 +89,17 @@ export function buildInputFrame(spec: FrameSpec): Frame {
   };
 }
 
+/**
+ * Escape prefix that moves the cursor from wherever the last frame left it
+ * (row `cursorRow` of the previous frame) back to the frame's FIRST row and
+ * clears downward. Moving by the frame height instead of the cursor row is the
+ * classic bug that climbs above the frame and erases prior output.
+ */
+export function repaintPrefix(prevRows: number, cursorRow: number): string {
+  if (prevRows <= 0) return "\x1b[0J"; // first paint: nothing above to return to
+  return `\r${cursorRow > 0 ? `\x1b[${cursorRow}A` : ""}\x1b[0J`;
+}
+
 /** Static Claude-Code-style welcome banner (rounded box). */
 export function banner(subtitle: string, totalWidth: number): string {
   const width = Math.max(40, Math.min(totalWidth, 160));
@@ -131,32 +142,37 @@ export function readBoxedLine(label: string, placeholder: string): Promise<strin
     const chars: string[] = []; // code points
     let cursor = 0;
     let drawn = 0; // rows drawn last time
+    let atRow = 0; // row (within the frame) the cursor was left on
     const width = () => stdout.columns || 100;
 
     const render = () => {
       const frame = buildInputFrame({ text: chars.join(""), cursor, totalWidth: width(), label, placeholder });
-      let out = "";
-      if (drawn > 0) out += `\r\x1b[${drawn - 1}A`; // move to first row
-      out += "\x1b[0J"; // clear from here down
+      // return to the frame's first row FROM THE CURSOR ROW (not frame height —
+      // overshooting climbs into prior output and erases it), then clear down
+      let out = repaintPrefix(drawn, atRow);
       out += frame.lines.join("\n");
-      // reposition cursor to (cursorRow, cursorCol): we're at last row now
+      // reposition cursor to (cursorRow, cursorCol): we're at the last row now
       const upFromLast = frame.lines.length - 1 - frame.cursorRow;
       if (upFromLast > 0) out += `\x1b[${upFromLast}A`;
       out += "\r";
       if (frame.cursorCol > 0) out += `\x1b[${frame.cursorCol}C`;
       stdout.write(out);
       drawn = frame.lines.length;
+      atRow = frame.cursorRow;
     };
 
     const finish = (val: string | null) => {
       stdin.setRawMode!(false);
       stdin.pause();
       stdin.removeListener("data", onData);
-      // move below the box and clear it, leave a clean line
-      const down = drawn - 1 - 1; // from cursor row (1) to last row
+      stdin.removeListener("end", onEnd);
+      // move from the cursor row down past the last row, leave a clean line
+      const down = drawn - 1 - atRow;
       stdout.write(`\r${down > 0 ? `\x1b[${down}B` : ""}\n`);
       resolve(val);
     };
+    // piped/redirected stdin can EOF — without this the box waits forever
+    const onEnd = () => finish(null);
 
     const onData = (buf: Buffer) => {
       const s = buf.toString("utf8");
@@ -195,6 +211,7 @@ export function readBoxedLine(label: string, placeholder: string): Promise<strin
     stdin.setRawMode(true);
     stdin.resume();
     stdin.on("data", onData);
+    stdin.on("end", onEnd);
     render();
   });
 }

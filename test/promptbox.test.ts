@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildInputFrame, banner } from "../src/cli/prompt-box.ts";
+import { buildInputFrame, banner, repaintPrefix } from "../src/cli/prompt-box.ts";
 import { dispWidth, stripAnsi } from "../src/cli/render.ts";
 
 test("input frame: box rows are equal display width", () => {
@@ -33,6 +33,16 @@ test("input frame: horizontal scroll keeps cursor visible for long input", () =>
   assert.equal(dispWidth(stripAnsi(f.lines[0]!)), w, "input row not wider than box");
   // cursor stays within the box interior
   assert.ok(f.cursorCol < 60, `cursor col ${f.cursorCol} within box`);
+});
+
+// Regression: backspace was erasing prior chat output. The repaint must move up
+// by the CURSOR ROW (1, the input line), never by the frame height (4 → climbs
+// 2 rows above the box and the clear-down eats history).
+test("repaintPrefix moves up by cursor row, not frame height", () => {
+  assert.equal(repaintPrefix(4, 1), "\r\x1b[1A\x1b[0J", "re-render from input row: up exactly 1");
+  assert.equal(repaintPrefix(0, 0), "\x1b[0J", "first paint: no cursor movement");
+  assert.equal(repaintPrefix(4, 0), "\r\x1b[0J", "cursor already on first row: no up-move");
+  assert.ok(!repaintPrefix(4, 1).includes("[3A"), "the old buggy overshoot is gone");
 });
 
 test("banner renders a rounded box with equal-width rows", () => {
